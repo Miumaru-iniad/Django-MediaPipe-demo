@@ -18,11 +18,13 @@ __pycache__/
 *.env
 
 # メディアファイルやアップロードファイル
-/media/
+media/*
+!.gitignore
 *.mp4
 
 # 静的ファイル
-/static/
+static/*
+!static/.gitignore
 
 # 開発用のSQLiteデータベース
 db.sqlite3
