@@ -1,5 +1,40 @@
 # Django-MediaPipe-demo
 This is a minimal demo of using MediaPipe in a web app built with Django to quantify the eye movement of a person in a video file sent to it.
+
+# ローカル環境でのセットアップ手順
+
+システム依存パッケージのインストール (Ubuntuの場合)
+以下のコマンドを実行して、必要なシステム依存パッケージをインストールしてください。
+
+bash
+コードをコピーする
+sudo apt update
+sudo apt install -y ffmpeg libsm6 libxext6 libglib2.0-0 libxrender1
+Python仮想環境のセットアップ
+仮想環境を作成して有効化します。
+デプロイする場合はDocker イメージを作成
+
+bash
+コードをコピーする
+python3 -m venv venv
+source venv/bin/activate
+依存パッケージをインストールします。
+
+bash
+コードをコピーする
+pip install -r requirements.txt
+Djangoアプリの起動
+データベースのマイグレーションを適用します。
+
+bash
+コードをコピーする
+python manage.py migrate
+開発サーバーを起動します。
+
+bash
+コードをコピーする
+python manage.py runserver
+
 # 要件定義書（MVP - 最小構成、保存・認証・ホスティングなし）
 
 ## 1. 機能要件

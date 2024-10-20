@@ -1,0 +1,51 @@
+# Python関連ファイル
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.pyc
+
+# Django関連ファイル
+*.log
+*.pot
+*.pyc
+*.pyo
+*.sqlite3
+
+# 環境ファイル
+.env
+*.env
+
+# メディアファイルやアップロードファイル
+/media/
+*.mp4
+
+# 静的ファイル
+/static/
+
+# 開発用のSQLiteデータベース
+db.sqlite3
+
+# 仮想環境
+venv/
+ENV/
+env/
+.venv/
+
+# IDE/エディタ関連ファイル
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# MacOS関連ファイル
+.DS_Store
+
+# Windows関連ファイル
+Thumbs.db
+ehthumbs.db
+
+# その他
+*.bak
+*.swp

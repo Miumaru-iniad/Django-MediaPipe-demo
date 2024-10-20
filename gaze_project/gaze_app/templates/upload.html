@@ -11,6 +11,11 @@
         .result {
             margin-top: 20px;
         }
+        video {
+            margin-top: 20px;
+            max-width: 100%;
+            height: auto;  /* 高さを自動調整してアスペクト比を保持 */
+        }
     </style>
 </head>
 <body>
@@ -31,11 +36,21 @@
     <div class="result" id="result">
         <h2>Analysis Result</h2>
         <p>{{ analysis_result }}</p>
+
+        <!-- 動的に生成された動画を再生 -->
+        {% if video_url %}
+        <video controls>
+            <source src="{{ MEDIA_URL }}{{ video_url }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video> 
+        <a href="{% url 'download_video' %}">
+            <button>Download Video</button>
+        </a>
+        {% endif %}
     </div>
     {% endif %}
 
     <script>
-        // フォーム送信時にスピナーを表示
         document.getElementById('uploadForm').onsubmit = function() {
             document.getElementById('spinner').style.display = 'block';
         };
