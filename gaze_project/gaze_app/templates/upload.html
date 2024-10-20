@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Video</title>
+    <style>
+        .spinner {
+            display: none;
+            margin-top: 10px;
+        }
+        .result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload Video for Gaze Analysis</h1>
+
+    <!-- 動画アップロードフォーム -->
+    <form method="post" enctype="multipart/form-data" id="uploadForm">
+        {% csrf_token %}
+        <input type="file" name="video" accept="video/mp4" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    <!-- 処理中に表示されるスピナー -->
+    <div class="spinner" id="spinner">Processing...</div>
+
+    <!-- 解析結果を表示するエリア -->
+    {% if analysis_result %}
+    <div class="result" id="result">
+        <h2>Analysis Result</h2>
+        <p>{{ analysis_result }}</p>
+    </div>
+    {% endif %}
+
+    <script>
+        // フォーム送信時にスピナーを表示
+        document.getElementById('uploadForm').onsubmit = function() {
+            document.getElementById('spinner').style.display = 'block';
+        };
+    </script>
+</body>
+</html>
