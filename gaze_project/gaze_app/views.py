@@ -1,11 +1,10 @@
 from django.shortcuts import render
-from django.http import HttpResponse, FileResponse
+from django.http import JsonResponse, FileResponse, Http404
 import mediapipe as mp
 import cv2
 import numpy as np
 import tempfile
 import os
-from django.http import Http404
 from django.conf import settings
 
 # MediaPipeのFaceMeshを初期化
@@ -16,123 +15,140 @@ mp_face_mesh = mp.solutions.face_mesh.FaceMesh(
     min_detection_confidence=0.5
 )
 
+import mediapipe as mp
+import cv2
+import numpy as np
+import tempfile
+import os
+from django.conf import settings
 
-def process_video_with_tracking(video_file):
-    # 一時ファイルを作成し、アップロードされた動画を保存
+# MediaPipeのFaceMeshを初期化
+mp_face_mesh = mp.solutions.face_mesh.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5
+)
+
+def save_temp_video(video_file):
+    """動画ファイルを一時保存する"""
     temp_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
     for chunk in video_file.chunks():
         temp_file.write(chunk)
     temp_file.seek(0)
+    return temp_file
 
-    # OpenCVで動画を読み込む
-    cap = cv2.VideoCapture(temp_file.name)
-
-    # 'mp4v'コーデックを指定して出力ファイルを初期化
+def initialize_video_writer(cap, output_filename):
+    """動画出力用の初期化を行う"""
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    output_filename = f"tracked_{os.path.basename(temp_file.name)}"
     output_file_path = os.path.join(settings.MEDIA_ROOT, output_filename)
-
-    # 動画の幅・高さ・フレームレートを取得
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-
-    # 出力用の動画ファイルを初期化
     out = cv2.VideoWriter(output_file_path, fourcc, fps, (width, height))
+    return out, width, height
 
-    total_gaze_movement = 0  # 視線の総移動量を格納する変数
+def calculate_gaze_movement(center_x, center_y, prev_center_x, prev_center_y):
+    """視線の移動量を計算（絶対値を使用）"""
+    dx = abs(center_x - prev_center_x)
+    dy = abs(center_y - prev_center_y)
+    return dx + dy
 
-    # フレームごとに動画を解析
+def process_frame(frame, prev_center_x, prev_center_y, width, height):
+    """フレームごとの視線の処理を行う"""
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = mp_face_mesh.process(frame_rgb)
+    center_x, center_y = None, None
+    gaze_movement = 0
+
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            left_eye_landmark = face_landmarks.landmark[145]
+            right_eye_landmark = face_landmarks.landmark[374]
+
+            # 両目の中心を計算
+            center_x = (left_eye_landmark.x + right_eye_landmark.x) / 2 * width
+            center_y = (left_eye_landmark.y + right_eye_landmark.y) / 2 * height
+
+            # 視線の移動量を計算
+            if prev_center_x is not None and prev_center_y is not None:
+                gaze_movement = calculate_gaze_movement(center_x, center_y, prev_center_x, prev_center_y)
+
+            # 中心位置を可視化
+            cv2.circle(frame, (int(center_x), int(center_y)), 5, (255, 0, 0), -1)
+
+    return frame, center_x, center_y, gaze_movement
+
+def process_video_with_tracking(video_file):
+    """動画内の視線トラッキングを行い、平均視線移動量を計算"""
+    temp_file = save_temp_video(video_file)
+    cap = cv2.VideoCapture(temp_file.name)
+    
+    output_filename = f"tracked_{os.path.basename(temp_file.name)}"
+    out, width, height = initialize_video_writer(cap, output_filename)
+
+    total_gaze_movement = 0
+    prev_center_x, prev_center_y = None, None
+    frame_count = 0
+
     while cap.isOpened():
-        ret, frame = cap.read()  # フレームを1つ読み込む
+        ret, frame = cap.read()
         if not ret:
             break
 
-        # BGRからRGBに変換（MediaPipeはRGBを要求）
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame, center_x, center_y, gaze_movement = process_frame(
+            frame, prev_center_x, prev_center_y, width, height
+        )
 
-        # MediaPipeで顔のランドマークを検出
-        results = mp_face_mesh.process(frame_rgb)
+        total_gaze_movement += gaze_movement
+        prev_center_x, prev_center_y = center_x, center_y
 
-        if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
-                # 左目と右目のランドマークを取得
-                left_eye_landmark = face_landmarks.landmark[145]
-                right_eye_landmark = face_landmarks.landmark[374]
-
-                # ランドマークの2D位置を画面上のピクセルに変換
-                left_x, left_y = int(left_eye_landmark.x * width), int(left_eye_landmark.y * height)
-                right_x, right_y = int(right_eye_landmark.x * width), int(right_eye_landmark.y * height)
-
-                # 目のランドマークを可視化（緑の円）
-                cv2.circle(frame, (left_x, left_y), 5, (0, 255, 0), -1)  # 左目
-                cv2.circle(frame, (right_x, right_y), 5, (0, 255, 0), -1)  # 右目
-
-                # 左目と右目間の距離を計算（2D平面でのユークリッド距離）
-                gaze_movement = np.sqrt((right_x - left_x) ** 2 + (right_y - left_y) ** 2)
-
-                # 視線の総移動量を累積
-                total_gaze_movement += gaze_movement
-
-        # フレームにオーバーレイを追加して保存
+        frame_count += 1
         out.write(frame)
 
-    cap.release()  # 動画のキャプチャを終了
-    out.release()  # 出力動画の保存を終了
-    temp_file.close()  # 一時ファイルを閉じる
+    cap.release()
+    out.release()
+    temp_file.close()
 
-    # 視線の総移動量と出力ファイルのパスを返す
-    return total_gaze_movement, output_filename
+    avg_gaze_movement = total_gaze_movement / frame_count if frame_count > 0 else 0
+    return avg_gaze_movement, output_filename
+
 
 def upload_video(request):
-    analysis_result = None
-    video_url = None
-
     if request.method == 'POST' and request.FILES.get('video'):
         video_file = request.FILES['video']
 
         if video_file.content_type == 'video/mp4':
-            # 視線トラッキング付き動画の生成と解析結果の取得
-            total_gaze_movement, tracked_video_path = process_video_with_tracking(video_file)
+            avg_gaze_movement, tracked_video_path = process_video_with_tracking(video_file)
 
-            # 動画のURLと解析結果を設定
             video_url = os.path.basename(tracked_video_path)
-            analysis_result = f'Total Gaze Movement: {total_gaze_movement:.2f}'
+            analysis_result = f'Average Gaze Movement: {avg_gaze_movement:.2f}'
 
-            # 生成された動画をダウンロード可能にする
-            request.session['tracked_video_path'] = tracked_video_path
-            return render(request, 'upload.html', {
+            return JsonResponse({
                 'analysis_result': analysis_result,
                 'video_url': video_url
             })
         else:
-            return HttpResponse('Invalid file type. Please upload an MP4 video.')
-    
-    return render(request, 'upload.html', {'analysis_result': analysis_result, 'video_url': video_url})
+            return JsonResponse({'error': 'Invalid file type. Please upload an MP4 video.'}, status=400)
 
-from django.http import Http404
+    return render(request, 'upload.html')
 
 def download_video(request):
-    # セッションから動画のパスを取得
     tracked_video_path = request.session.get('tracked_video_path')
 
-    # 動画ファイルが存在するかを確認
     if tracked_video_path and os.path.exists(tracked_video_path):
         try:
-            # 動画ファイルを開き直す
             video_file = open(tracked_video_path, 'rb')
             response = FileResponse(video_file, as_attachment=True, filename='tracked_video.mp4')
             return response
         except Exception as e:
-            print(f"Error during file download: {e}")  # デバッグ用のログ
+            print(f"Error during file download: {e}")
             raise Http404("Video file could not be downloaded.")
     else:
-        # ファイルが見つからない場合
         raise Http404("No video available for download.")
 
 def some_view(request):
-    # 'upload.html'テンプレートをレンダリングする
     context = {
-        'media_url': settings.MEDIA_URL  # MEDIA_URLをテンプレートに渡す
+        'media_url': settings.MEDIA_URL
     }
     return render(request, 'upload.html', context)

@@ -10,11 +10,12 @@
         }
         .result {
             margin-top: 20px;
+            display: none;
         }
         video {
             margin-top: 20px;
             max-width: 100%;
-            height: auto;  /* 高さを自動調整してアスペクト比を保持 */
+            height: auto;
         }
     </style>
 </head>
@@ -24,36 +25,89 @@
     <!-- 動画アップロードフォーム -->
     <form method="post" enctype="multipart/form-data" id="uploadForm">
         {% csrf_token %}
-        <input type="file" name="video" accept="video/mp4" required>
+        <input type="file" name="video" accept="video/mp4" id="videoInput" required>
         <button type="submit">Upload</button>
     </form>
+
+    <!-- 未加工の動画プレビューエリア -->
+    <div id="rawVideoContainer">
+        <h2>Raw Video Preview</h2>
+        <video controls id="rawVideo"></video>
+    </div>
 
     <!-- 処理中に表示されるスピナー -->
     <div class="spinner" id="spinner">Processing...</div>
 
     <!-- 解析結果を表示するエリア -->
-    {% if analysis_result %}
-    <div class="result" id="result">
+    <div class="result" id="resultContainer">
         <h2>Analysis Result</h2>
-        <p>{{ analysis_result }}</p>
-
-        <!-- 動的に生成された動画を再生 -->
-        {% if video_url %}
-        <video controls>
-            <source src="{{ MEDIA_URL }}{{ video_url }}" type="video/mp4">
-            Your browser does not support the video tag.
-        </video> 
-        <a href="{% url 'download_video' %}">
-            <button>Download Video</button>
-        </a>
-        {% endif %}
+        <p id="analysisResult"></p>
+        <div id="videoResultContainer" style="display: none;">
+            <video controls id="trackedVideo"></video>
+            <a id="downloadLink" href="#">
+                <button>Download Video</button>
+            </a>
+        </div>
     </div>
-    {% endif %}
 
     <script>
-        document.getElementById('uploadForm').onsubmit = function() {
-            document.getElementById('spinner').style.display = 'block';
+        // フォームの非同期送信処理
+        document.getElementById('uploadForm').onsubmit = function(event) {
+            event.preventDefault(); // デフォルトのフォーム送信をキャンセル
+
+            const formData = new FormData(this); // フォームデータの取得
+            document.getElementById('spinner').style.display = 'block'; // スピナーの表示
+
+            // Fetch APIを使って非同期でフォームを送信
+            fetch("{% url 'upload_video' %}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json(); // JSON形式のレスポンスを期待
+            })
+            .then(data => {
+                // スピナーを非表示
+                document.getElementById('spinner').style.display = 'none';
+
+                // 解析結果の表示
+                if (data.analysis_result) {
+                    document.getElementById('analysisResult').innerText = data.analysis_result;
+                    document.getElementById('resultContainer').style.display = 'block';
+                }
+
+                // トラッキング動画の表示
+                if (data.video_url) {
+                    const trackedVideo = document.getElementById('trackedVideo');
+                    trackedVideo.src = "/media/" + data.video_url;
+                    document.getElementById('videoResultContainer').style.display = 'block';
+
+                    // ダウンロードリンクの設定
+                    const downloadLink = document.getElementById('downloadLink');
+                    downloadLink.href = "/media/" + data.video_url;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error); // エラー処理
+                document.getElementById('spinner').style.display = 'none';
+                alert('An error occurred while uploading the video.');
+            });
         };
+
+        // 選択されたファイルをプレビューするイベントリスナー
+        document.getElementById('videoInput').addEventListener('change', function(event) {
+            const file = event.target.files[0]; // 選択されたファイルを取得
+            const videoElement = document.getElementById('rawVideo');
+
+            if (file) {
+                const fileURL = URL.createObjectURL(file); // 一時URLを作成
+                videoElement.src = fileURL; // 動画のソースを設定
+                videoElement.style.display = 'block'; // 動画を表示
+            }
+        });
     </script>
 </body>
 </html>
